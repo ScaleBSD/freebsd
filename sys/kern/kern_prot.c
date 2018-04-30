@@ -88,6 +88,72 @@ SYSCTL_NODE(_security, OID_AUTO, bsd, CTLFLAG_RW, 0, "BSD security policy");
 static void crsetgroups_locked(struct ucred *cr, int ngrp,
     gid_t *groups);
 
+static uma_zone_t zone_ucred;
+
+static int
+ucred_ctor(void *mem, int size, void *arg, int flags)
+{
+	struct ucred *cr;
+
+	cr = mem;
+	bzero(cr, sizeof(*cr));
+	refcount_init(&cr->cr_ref, 1);
+#ifdef AUDIT
+	audit_cred_init(cr);
+#endif
+#ifdef MAC
+	mac_cred_init(cr);
+#endif
+	cr->cr_groups = cr->cr_smallgroups;
+	cr->cr_agroups =
+	    sizeof(cr->cr_smallgroups) / sizeof(cr->cr_smallgroups[0]);
+	return (0);
+}
+
+static void
+ucred_dtor(void *mem, int size, void *arg)
+{
+	struct ucred *cr;
+
+	cr = mem;
+	/*
+	 * Some callers of crget(), such as nfs_statfs(),
+	 * allocate a temporary credential, but don't
+	 * allocate a uidinfo structure.
+	 */
+	if (cr->cr_uidinfo != NULL)
+		uifree(cr->cr_uidinfo);
+	if (cr->cr_ruidinfo != NULL)
+		uifree(cr->cr_ruidinfo);
+	/*
+	 * Free a prison, if any.
+	 */
+	if (cr->cr_prison != NULL)
+		prison_free(cr->cr_prison);
+	if (cr->cr_loginclass != NULL)
+		loginclass_free(cr->cr_loginclass);
+#ifdef AUDIT
+	audit_cred_destroy(cr);
+#endif
+#ifdef MAC
+	mac_cred_destroy(cr);
+#endif
+	if (cr->cr_groups != cr->cr_smallgroups)
+		free(cr->cr_groups, M_CRED);
+}
+
+
+static void
+ucred_init(void *dummy __unused)
+{
+	zone_ucred = uma_zcreate("ucred_zone", sizeof(struct ucred),
+							 ucred_ctor, ucred_dtor, NULL, NULL,
+							 UMA_ALIGN_CACHE, UMA_ZONE_NOFREE);
+}
+
+SYSINIT(mbuf, SI_SUB_CPU+1, SI_ORDER_ANY, ucred_init, NULL);
+
+
 #ifndef _SYS_SYSPROTO_H_
 struct getpid_args {
 	int	dummy;
@@ -1824,23 +1890,18 @@ p_canwait(struct thread *td, struct proc *p)
  * Allocate a zeroed cred structure.
  */
 struct ucred *
+crget_arg(int flags)
+{
+	return (uma_zalloc(zone_ucred, flags));
+}
+
+
+struct ucred *
 crget(void)
 {
-	struct ucred *cr;
-
-	cr = malloc(sizeof(*cr), M_CRED, M_WAITOK | M_ZERO);
-	refcount_init(&cr->cr_ref, 1);
-#ifdef AUDIT
-	audit_cred_init(cr);
-#endif
-#ifdef MAC
-	mac_cred_init(cr);
-#endif
-	cr->cr_groups = cr->cr_smallgroups;
-	cr->cr_agroups =
-	    sizeof(cr->cr_smallgroups) / sizeof(cr->cr_smallgroups[0]);
-	return (cr);
+	return (crget_arg(M_WAITOK));
 }
+
 
 /*
  * Claim another reference to a ucred structure.
@@ -1862,33 +1923,8 @@ crfree(struct ucred *cr)
 
 	KASSERT(cr->cr_ref > 0, ("bad ucred refcount: %d", cr->cr_ref));
 	KASSERT(cr->cr_ref != 0xdeadc0de, ("dangling reference to ucred"));
-	if (refcount_release(&cr->cr_ref)) {
-		/*
-		 * Some callers of crget(), such as nfs_statfs(),
-		 * allocate a temporary credential, but don't
-		 * allocate a uidinfo structure.
-		 */
-		if (cr->cr_uidinfo != NULL)
-			uifree(cr->cr_uidinfo);
-		if (cr->cr_ruidinfo != NULL)
-			uifree(cr->cr_ruidinfo);
-		/*
-		 * Free a prison, if any.
-		 */
-		if (cr->cr_prison != NULL)
-			prison_free(cr->cr_prison);
-		if (cr->cr_loginclass != NULL)
-			loginclass_free(cr->cr_loginclass);
-#ifdef AUDIT
-		audit_cred_destroy(cr);
-#endif
-#ifdef MAC
-		mac_cred_destroy(cr);
-#endif
-		if (cr->cr_groups != cr->cr_smallgroups)
-			free(cr->cr_groups, M_CRED);
-		free(cr, M_CRED);
-	}
+	if (refcount_release(&cr->cr_ref))
+		uma_zfree(zone_ucred, cr);
 }
 
 /*
@@ -1923,7 +1959,18 @@ crdup(struct ucred *cr)
 {
 	struct ucred *newcr;
 
-	newcr = crget();
+	newcr = crget_arg(M_WAITOK);
+	crcopy(newcr, cr);
+	return (newcr);
+}
+
+struct ucred *
+crdup_arg(struct ucred *cr, int flags)
+{
+	struct ucred *newcr;
+
+	if ((newcr = crget_arg(flags)) == NULL)
+		return (NULL);
 	crcopy(newcr, cr);
 	return (newcr);
 }
