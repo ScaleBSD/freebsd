@@ -97,7 +97,6 @@ struct racct;
  */
 struct uidinfo {
 	LIST_ENTRY(uidinfo) ui_hash;	/* (c) hash chain of uidinfos */
-	struct mtx ui_vmsize_mtx;
 	vm_ooffset_t ui_vmsize;		/* (d) swap reservation by uid */
 	long	ui_sbsize;		/* (b) socket buffer space consumed */
 	long	ui_proccnt;		/* (b) number of processes */
@@ -111,8 +110,6 @@ struct uidinfo {
 #endif
 };
 
-#define	UIDINFO_VMSIZE_LOCK(ui)		mtx_lock(&((ui)->ui_vmsize_mtx))
-#define	UIDINFO_VMSIZE_UNLOCK(ui)	mtx_unlock(&((ui)->ui_vmsize_mtx))
 
 struct proc;
 struct rusage_ext;
