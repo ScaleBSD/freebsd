@@ -448,9 +448,12 @@ thread_free(struct thread *td)
 void
 thread_cow_get_proc(struct thread *newtd, struct proc *p)
 {
+	struct ucred *newcred;
 
 	PROC_LOCK_ASSERT(p, MA_OWNED);
-	newtd->td_ucred = crhold(p->p_ucred);
+	if ((newcred = crdup_arg(p->p_ucred, M_NOWAIT)) == NULL)
+		newcred = crhold(p->p_ucred);
+	newtd->td_ucred = newcred;
 	newtd->td_limit = lim_hold(p->p_limit);
 	newtd->td_cowgen = p->p_cowgen;
 }
@@ -459,7 +462,7 @@ void
 thread_cow_get(struct thread *newtd, struct thread *td)
 {
 
-	newtd->td_ucred = crhold(td->td_ucred);
+	newtd->td_ucred = crdup(td->td_ucred);
 	newtd->td_limit = lim_hold(td->td_limit);
 	newtd->td_cowgen = td->td_cowgen;
 }
@@ -478,7 +481,7 @@ void
 thread_cow_update(struct thread *td)
 {
 	struct proc *p;
-	struct ucred *oldcred;
+	struct ucred *oldcred, *newcred;
 	struct plimit *oldlimit;
 
 	p = td->td_proc;
@@ -487,7 +490,9 @@ thread_cow_update(struct thread *td)
 	PROC_LOCK(p);
 	if (td->td_ucred != p->p_ucred) {
 		oldcred = td->td_ucred;
-		td->td_ucred = crhold(p->p_ucred);
+		if ((newcred = crdup_arg(p->p_ucred, M_NOWAIT)) == NULL)
+			newcred = crhold(p->p_ucred);
+		td->td_ucred = newcred;
 	}
 	if (td->td_limit != p->p_limit) {
 		oldlimit = td->td_limit;
