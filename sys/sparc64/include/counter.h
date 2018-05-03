@@ -32,9 +32,7 @@
 #define __MACHINE_COUNTER_H__
 
 #include <sys/pcpu.h>
-#ifdef INVARIANTS
 #include <sys/proc.h>
-#endif
 
 extern struct pcpu dummy_pcpu[];
 #define	EARLY_COUNTER	&dummy_pcpu[0].pc_early_dummy_counter
