@@ -2241,7 +2241,7 @@ pmc_destroy_pmc_descriptor(struct pmc *pm)
 	    ("[pmc,%d] destroying pmc attached to an owner", __LINE__));
 	KASSERT(counter_u64_fetch(pm->pm_runcount) == 0,
 	    ("[pmc,%d] pmc has non-zero run count %ld", __LINE__,
-		 counter_u64_fetch(pm->pm_runcount)));
+		 (unsigned long)counter_u64_fetch(pm->pm_runcount)));
 
 	counter_u64_free(pm->pm_runcount);
 	free(pm->pm_pcpu_state, M_PMC);
@@ -2266,7 +2266,7 @@ pmc_wait_for_pmc_idle(struct pmc *pm)
 		KASSERT(maxloop > 0,
 		    ("[pmc,%d] (ri%d, rc%ld) waiting too long for "
 			"pmc to be free", __LINE__,
-			 PMC_TO_ROWINDEX(pm), counter_u64_fetch(pm->pm_runcount)));
+			 PMC_TO_ROWINDEX(pm), (unsigned long)counter_u64_fetch(pm->pm_runcount)));
 #endif
 		pmc_force_context_switch();
 	}
@@ -4172,7 +4172,7 @@ pmc_process_interrupt(int cpu, int ring, struct pmc *pm, struct trapframe *tf,
 
 	KASSERT(counter_u64_fetch(pm->pm_runcount) >= 0,
 	    ("[pmc,%d] pm=%p runcount %ld", __LINE__, (void *) pm,
-		 counter_u64_fetch(pm->pm_runcount)));
+		 (unsigned long)counter_u64_fetch(pm->pm_runcount)));
 
 	counter_u64_add(pm->pm_runcount, 1);	/* hold onto PMC */
 
@@ -4282,7 +4282,7 @@ pmc_capture_user_callchain(int cpu, int ring, struct trapframe *tf)
 			"want it", __LINE__));
 
 		KASSERT(counter_u64_fetch(pm->pm_runcount) > 0,
-		    ("[pmc,%d] runcount %ld", __LINE__, counter_u64_fetch(pm->pm_runcount)));
+		    ("[pmc,%d] runcount %ld", __LINE__, (unsigned long)counter_u64_fetch(pm->pm_runcount)));
 
 		/*
 		 * Retrieve the callchain and mark the sample buffer
@@ -4346,7 +4346,7 @@ pmc_process_samples(int cpu, int ring)
 
 		KASSERT(counter_u64_fetch(pm->pm_runcount) > 0,
 		    ("[pmc,%d] pm=%p runcount %ld", __LINE__, (void *) pm,
-			 counter_u64_fetch(pm->pm_runcount)));
+			 (unsigned long)counter_u64_fetch(pm->pm_runcount)));
 
 		po = pm->pm_owner;
 
@@ -4550,7 +4550,7 @@ pmc_process_exit(void *arg __unused, struct proc *p)
 
 			KASSERT(counter_u64_fetch(pm->pm_runcount) > 0,
 			    ("[pmc,%d] bad runcount ri %d rc %ld",
-				 __LINE__, ri, counter_u64_fetch(pm->pm_runcount)));
+				 __LINE__, ri, (unsigned long)counter_u64_fetch(pm->pm_runcount)));
 
 			/*
 			 * Change desired state, and then stop if not
