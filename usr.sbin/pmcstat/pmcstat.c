@@ -425,7 +425,8 @@ main(int argc, char **argv)
 	double interval;
 	double duration;
 	int option, npmc;
-	int c, check_driver_stats, current_sampling_count;
+	int c, check_driver_stats;
+	uint64_t current_sampling_count;
 	int do_callchain, do_descendants, do_logproccsw, do_logprocexit;
 	int do_print, do_read;
 	size_t len;
